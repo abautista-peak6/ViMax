@@ -4,11 +4,11 @@ import logging
 import asyncio
 from PIL import Image
 from typing import List, Optional
-from google import genai
 from google.genai import types
 from google.genai.errors import ClientError
 from tenacity import retry, stop_after_attempt
 from interfaces.image_output import ImageOutput
+from utils.google_vertex import create_genai_client
 from utils.retry import after_func
 from utils.rate_limiter import RateLimiter
 
@@ -16,13 +16,22 @@ from utils.rate_limiter import RateLimiter
 class ImageGeneratorNanobananaGoogleAPI:
     def __init__(
         self,
-        api_key: str,
+        api_key: Optional[str] = None,
+        project: Optional[str] = None,
+        location: Optional[str] = None,
+        model: str = "gemini-2.5-flash-image",
+        use_vertex_ai: bool = True,
+        api_version: str = "v1",
         rate_limiter: Optional[RateLimiter] = None,
     ):
-        self.model = "gemini-2.5-flash-image"
+        self.model = model
         self.rate_limiter = rate_limiter
-        self.client = genai.Client(
+        self.client = create_genai_client(
             api_key=api_key,
+            project=project,
+            location=location,
+            use_vertex_ai=use_vertex_ai,
+            api_version=api_version,
         )
 
     @retry(stop=stop_after_attempt(3), after=after_func)
@@ -84,4 +93,3 @@ class ImageGeneratorNanobananaGoogleAPI:
             raise ValueError("No image generated")
 
         return ImageOutput(fmt="pil", ext="png", data=image)
-

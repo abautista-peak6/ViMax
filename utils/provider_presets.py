@@ -17,6 +17,19 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 PROVIDER_PRESETS: Dict[str, Dict[str, Any]] = {
+    "google_vertex": {
+        "env_project": "GOOGLE_CLOUD_PROJECT",
+        "env_location": "GOOGLE_CLOUD_LOCATION",
+        "default_model": "gemini-2.5-flash",
+        "default_location": "global",
+        "models": [
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.5-pro",
+        ],
+        "temperature_range": (0.0, 2.0),
+        "rewrite_model_provider": "google_vertex",
+    },
     "minimax": {
         "base_url": "https://api.minimax.io/v1",
         "env_key": "MINIMAX_API_KEY",
@@ -28,33 +41,34 @@ PROVIDER_PRESETS: Dict[str, Dict[str, Any]] = {
             "MiniMax-M2.5-highspeed",
         ],
         "temperature_range": (0.0, 1.0),
+        "rewrite_model_provider": "openai",
     },
 }
 
 
 def resolve_chat_model_config(init_args: Dict[str, Any]) -> Dict[str, Any]:
-    """Resolve provider presets and return final ``init_chat_model`` kwargs.
+    """Resolve provider presets and return final chat model factory kwargs.
 
-    If ``model_provider`` matches a known preset (e.g. ``minimax``), the
-    returned dict will have:
+    If ``model_provider`` matches a known preset (e.g. ``google_vertex`` or
+    ``minimax``), the returned dict will have provider defaults filled in.
+    OpenAI-compatible providers such as ``minimax`` are rewritten to
+    ``"openai"`` for LangChain compatibility.
 
-    * ``model_provider`` rewritten to ``"openai"`` (OpenAI-compatible API)
-    * ``base_url`` filled in from the preset when not already set
-    * ``api_key`` sourced from the environment when not already set
     * ``model`` defaulted to the preset's default model when not already set
     * ``temperature`` clamped to the provider's supported range
 
     For unknown providers the dict is returned unchanged.
     """
     args = dict(init_args)  # shallow copy
-    provider = args.get("model_provider", "openai")
+    provider = args.get("model_provider") or "google_vertex"
+    args["model_provider"] = provider
 
     preset = PROVIDER_PRESETS.get(provider)
     if preset is None:
         return args
 
     # base_url
-    if not args.get("base_url"):
+    if preset.get("base_url") and not args.get("base_url"):
         args["base_url"] = preset["base_url"]
 
     # api_key – fall back to env var
@@ -64,6 +78,18 @@ def resolve_chat_model_config(init_args: Dict[str, Any]) -> Dict[str, Any]:
         if env_val:
             args["api_key"] = env_val
             logger.info("Using %s API key from environment variable %s", provider, env_key)
+
+    # Vertex project/location
+    if not args.get("project"):
+        env_project = preset.get("env_project", "")
+        project = os.environ.get(env_project, "")
+        if project:
+            args["project"] = project
+            logger.info("Using Google Vertex project from environment variable %s", env_project)
+
+    if preset.get("default_location") and not args.get("location"):
+        env_location = preset.get("env_location", "")
+        args["location"] = os.environ.get(env_location, "") or preset["default_location"]
 
     # default model
     if not args.get("model"):
@@ -82,8 +108,9 @@ def resolve_chat_model_config(init_args: Dict[str, Any]) -> Dict[str, Any]:
                 original, args["temperature"], provider,
             )
 
-    # rewrite to openai-compatible provider for LangChain
-    args["model_provider"] = "openai"
+    rewrite_provider = preset.get("rewrite_model_provider")
+    if rewrite_provider:
+        args["model_provider"] = rewrite_provider
 
     return args
 
@@ -97,5 +124,8 @@ def detect_provider_from_env() -> Optional[str]:
     for name, preset in PROVIDER_PRESETS.items():
         env_key = preset.get("env_key", "")
         if env_key and os.environ.get(env_key):
+            return name
+        env_project = preset.get("env_project", "")
+        if env_project and os.environ.get(env_project):
             return name
     return None

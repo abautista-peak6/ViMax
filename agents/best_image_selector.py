@@ -1,10 +1,10 @@
 import logging
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain.chat_models import init_chat_model
+from utils.chat_model_factory import create_chat_model
 from utils.image import image_path_to_b64
 
 
@@ -61,17 +61,22 @@ class BestImageResponse(BaseModel):
 class BestImageSelector:
     def __init__(
         self,
-        base_url: str,
-        api_key: str,
-        chat_model: str,
+        base_url: str = "",
+        api_key: str = "",
+        chat_model: str = "gemini-2.5-flash",
+        model_provider: str = "google_vertex",
+        project: Optional[str] = None,
+        location: Optional[str] = None,
     ):
         
-        self.chat_model = init_chat_model(
-            model=chat_model,
-            model_provider="openai",
-            base_url=base_url,
-            api_key=api_key,
-        )
+        self.chat_model = create_chat_model({
+            "model": chat_model,
+            "model_provider": model_provider,
+            "base_url": base_url,
+            "api_key": api_key,
+            "project": project,
+            "location": location,
+        })
 
 
     @retry(

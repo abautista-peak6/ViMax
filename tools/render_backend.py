@@ -11,6 +11,8 @@ Usage::
     video = await backend.video_generator.generate_single_video(...)
 """
 
+from __future__ import annotations
+
 import importlib
 import logging
 from dataclasses import dataclass

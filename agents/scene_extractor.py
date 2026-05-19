@@ -1,12 +1,12 @@
 from langchain_community.vectorstores import FAISS
 from interfaces import Event, Scene
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain.chat_models import init_chat_model
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal, Tuple, Dict
 from langchain_core.output_parsers import PydanticOutputParser
 from tenacity import retry, stop_after_attempt
 import logging
+from utils.chat_model_factory import create_chat_model
 
 system_prompt_template_get_next_scene = \
 """
@@ -61,16 +61,21 @@ human_prompt_template_get_next_scene = \
 class SceneExtractor:
     def __init__(
         self,
-        api_key,
-        base_url,
-        chat_model,
+        api_key="",
+        base_url="",
+        chat_model="gemini-2.5-flash",
+        model_provider="google_vertex",
+        project: Optional[str] = None,
+        location: Optional[str] = None,
     ):
-        self.chat_model = init_chat_model(
-            model=chat_model,
-            api_key=api_key,
-            base_url=base_url,
-            model_provider="openai",
-        )
+        self.chat_model = create_chat_model({
+            "model": chat_model,
+            "api_key": api_key,
+            "base_url": base_url,
+            "model_provider": model_provider,
+            "project": project,
+            "location": location,
+        })
 
     @retry(
         stop=stop_after_attempt(5),

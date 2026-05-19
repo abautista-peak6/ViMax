@@ -1,12 +1,12 @@
 import os
 import logging
 import asyncio
-from typing import List
+from typing import List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain.chat_models import init_chat_model
 from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt
+from utils.chat_model_factory import create_chat_model
 
 from interfaces import Event
 
@@ -79,16 +79,21 @@ human_prompt_template_extract_next_event = \
 class EventExtractor:
     def __init__(
         self,
-        api_key: str,
-        base_url: str,
-        chat_model: str,
+        api_key: str = "",
+        base_url: str = "",
+        chat_model: str = "gemini-2.5-flash",
+        model_provider: str = "google_vertex",
+        project: Optional[str] = None,
+        location: Optional[str] = None,
     ):
-        self.chat_model = init_chat_model(
-            model=chat_model,
-            model_provider="openai",
-            api_key=api_key,
-            base_url=base_url,
-        )
+        self.chat_model = create_chat_model({
+            "model": chat_model,
+            "model_provider": model_provider,
+            "api_key": api_key,
+            "base_url": base_url,
+            "project": project,
+            "location": location,
+        })
         self.parser = PydanticOutputParser(pydantic_object=Event)
 
 
@@ -141,6 +146,4 @@ class EventExtractor:
         assert event.index == len(extracted_events), f"Extracted event index {event.index} does not match the expected index {len(extracted_events)}"
 
         return event
-
-
 

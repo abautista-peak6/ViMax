@@ -1,10 +1,10 @@
 import logging
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain.chat_models import init_chat_model
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 from tenacity import retry
+from utils.chat_model_factory import create_chat_model
 
 
 narrative_script_prompt_template = \
@@ -329,17 +329,21 @@ class PlannedScriptResponse(BaseModel):
 class ScriptPlanner:
     def __init__(
         self,
-        chat_model: str,
-        base_url: str,
-        api_key: str,
-        model_provider: str = "openai",
+        chat_model: str = "gemini-2.5-flash",
+        base_url: str = "",
+        api_key: str = "",
+        model_provider: str = "google_vertex",
+        project: Optional[str] = None,
+        location: Optional[str] = None,
     ):
-        self.chat_model = init_chat_model(
-            model=chat_model,
-            model_provider=model_provider,
-            base_url=base_url,
-            api_key=api_key,
-        )
+        self.chat_model = create_chat_model({
+            "model": chat_model,
+            "model_provider": model_provider,
+            "base_url": base_url,
+            "api_key": api_key,
+            "project": project,
+            "location": location,
+        })
 
     @retry
     def plan_script(
@@ -427,5 +431,3 @@ class ScriptPlanner:
         except Exception as e:
             logging.error(f"Error planning script: \n{e}")
             raise e
-
-

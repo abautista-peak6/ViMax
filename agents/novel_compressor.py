@@ -1,10 +1,10 @@
 import os
 import logging
 import asyncio
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain.chat_models import init_chat_model
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from utils.chat_model_factory import create_chat_model
 
 
 
@@ -80,18 +80,23 @@ human_prompt_template_aggregate = \
 class NovelCompressor:
     def __init__(
         self,
-        api_key: str,
-        base_url: str,
-        chat_model: str,
+        api_key: str = "",
+        base_url: str = "",
+        chat_model: str = "gemini-2.5-flash",
+        model_provider: str = "google_vertex",
+        project: Optional[str] = None,
+        location: Optional[str] = None,
         chunk_size: int = 65536,
         chunk_overlap: int = 8192,
     ):
-        self.chat_model = init_chat_model(
-            model=chat_model,
-            api_key=api_key,
-            base_url=base_url,
-            model_provider="openai",
-        )
+        self.chat_model = create_chat_model({
+            "model": chat_model,
+            "api_key": api_key,
+            "base_url": base_url,
+            "model_provider": model_provider,
+            "project": project,
+            "location": location,
+        })
 
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
@@ -168,4 +173,3 @@ class NovelCompressor:
         response = self.chat_model.invoke(messages)
         aggregated_novel = response.content
         return aggregated_novel
-

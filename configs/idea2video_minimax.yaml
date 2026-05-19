@@ -20,14 +20,23 @@ chat_model:
 image_generator:
   class_path: tools.ImageGeneratorNanobananaGoogleAPI
   init_args:
-    api_key: <YOUR_API_KEY>
+    project: p6s-p6strat-abautista-dev
+    location: global
+    model: gemini-2.5-flash-image
   max_requests_per_minute: 10
   max_requests_per_day: 500
 
 video_generator:
   class_path: tools.VideoGeneratorVeoGoogleAPI
   init_args:
-    api_key: <YOUR_API_KEY>
+    project: p6s-p6strat-abautista-dev
+    location: global
+    t2v_model: veo-3.1-generate-001
+    ff2v_model: veo-3.1-generate-001
+    flf2v_model: veo-3.1-generate-001
+    generate_audio: true
+    person_generation: allow_adult
+    output_gcs_uri:
   max_requests_per_minute: 2
   max_requests_per_day: 10
 

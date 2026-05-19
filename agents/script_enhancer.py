@@ -1,9 +1,10 @@
 import logging
+from typing import Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain.chat_models import init_chat_model
 from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt
+from utils.chat_model_factory import create_chat_model
 
 
 system_prompt_template_script_enhancer = \
@@ -73,17 +74,21 @@ class EnhancedScriptResponse(BaseModel):
 class ScriptEnhancer:
     def __init__(
         self,
-        chat_model: str,
-        base_url: str,
-        api_key: str,
-        model_provider: str = "openai",
+        chat_model: str = "gemini-2.5-flash",
+        base_url: str = "",
+        api_key: str = "",
+        model_provider: str = "google_vertex",
+        project: Optional[str] = None,
+        location: Optional[str] = None,
     ):
-        self.chat_model = init_chat_model(
-            model=chat_model,
-            model_provider=model_provider,
-            base_url=base_url,
-            api_key=api_key,
-        )
+        self.chat_model = create_chat_model({
+            "model": chat_model,
+            "model_provider": model_provider,
+            "base_url": base_url,
+            "api_key": api_key,
+            "project": project,
+            "location": location,
+        })
 
     @retry(
         stop=stop_after_attempt(3),
@@ -118,5 +123,3 @@ class ScriptEnhancer:
         except Exception as e:
             logging.error(f"Error enhancing script: \n{e}")
             raise e
-
-

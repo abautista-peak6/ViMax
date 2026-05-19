@@ -4,7 +4,6 @@ from tenacity import retry, stop_after_attempt
 from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain.chat_models import init_chat_model
 from utils.image import image_path_to_b64
 
 from utils.retry import after_func
@@ -221,5 +220,4 @@ class ReferenceImageSelector:
         except Exception as e:
             logging.error(f"Error get image prompt: \n{e}")
             raise e
-
 

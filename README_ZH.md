@@ -378,24 +378,38 @@ uv sync
 
 ### 🎯 **Usage**
 main_idea2video.py is used to convert your ideas into videos.
-You need to configure the model and API key information in the configs/idea2video.yaml file, including three parts—the chat model, the image generator, and the video generator, as shown below
+ViMax now uses Google Vertex AI for chat, image, and video inference. Authenticate with Application Default Credentials and set your project before running:
+```bash
+gcloud auth application-default login
+export GOOGLE_CLOUD_PROJECT=<YOUR_PROJECT_ID>
+export GOOGLE_CLOUD_LOCATION=global
+```
+
+You need to configure the Vertex model information in the configs/idea2video.yaml file, including three parts—the chat model, the image generator, and the video generator, as shown below
 ```yaml
 chat_model:
   init_args:
-    model: google/gemini-2.5-flash-lite-preview-09-2025
-    model_provider: openai
-    api_key: <YOUR_API_KEY>
-    base_url: https://openrouter.ai/api/v1
+    model: gemini-2.5-flash
+    model_provider: google_vertex
+    project:
+    location: global
 
 image_generator:
   class_path: tools.ImageGeneratorNanobananaGoogleAPI
   init_args:
-    api_key: <YOUR_API_KEY>
+    project:
+    location: global
+    model: gemini-2.5-flash-image
 
 video_generator:
   class_path: tools.VideoGeneratorVeoGoogleAPI
   init_args:
-    api_key: <YOUR_API_KEY>
+    project:
+    location: global
+    t2v_model: veo-3.1-generate-001
+    ff2v_model: veo-3.1-generate-001
+    flf2v_model: veo-3.1-generate-001
+    output_gcs_uri:
 
 working_dir: .working_dir/idea2video
 ```
@@ -434,4 +448,3 @@ style = "Animate Style"
 
 
 ---
-

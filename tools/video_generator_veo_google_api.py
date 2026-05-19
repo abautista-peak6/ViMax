@@ -1,10 +1,10 @@
 import logging
 from typing import List, Optional
 import asyncio
-from google import genai
 from google.genai import types
 from google.genai.errors import ClientError
 from interfaces.video_output import VideoOutput
+from utils.google_vertex import create_genai_client
 from utils.rate_limiter import RateLimiter
 
 # https://ai.google.dev/gemini-api/docs/video-generation?hl=zh-cn
@@ -13,20 +13,34 @@ from utils.rate_limiter import RateLimiter
 class VideoGeneratorVeoGoogleAPI:
     def __init__(
         self,
-        api_key: str,
-        t2v_model: str = "veo-3.1-generate-preview",
-        ff2v_model: str = "veo-3.1-generate-preview",
-        flf2v_model: str = "veo-3.1-generate-preview",
+        api_key: Optional[str] = None,
+        project: Optional[str] = None,
+        location: Optional[str] = None,
+        t2v_model: str = "veo-3.1-generate-001",
+        ff2v_model: str = "veo-3.1-generate-001",
+        flf2v_model: str = "veo-3.1-generate-001",
+        generate_audio: bool = True,
+        person_generation: str = "allow_adult",
+        output_gcs_uri: Optional[str] = None,
+        use_vertex_ai: bool = True,
+        api_version: str = "v1",
         rate_limiter: Optional[RateLimiter] = None,
     ):
         self.api_key = api_key
         self.t2v_model = t2v_model
         self.ff2v_model = ff2v_model
         self.flf2v_model = flf2v_model
+        self.generate_audio = generate_audio
+        self.person_generation = person_generation
+        self.output_gcs_uri = output_gcs_uri
         self.rate_limiter = rate_limiter
 
-        self.client = genai.Client(
+        self.client = create_genai_client(
             api_key=api_key,
+            project=project,
+            location=location,
+            use_vertex_ai=use_vertex_ai,
+            api_version=api_version,
         )
     
     async def generate_single_video(
@@ -45,7 +59,12 @@ class VideoGeneratorVeoGoogleAPI:
             "resolution": resolution,
             "aspect_ratio": aspect_ratio,
             "duration_seconds": duration,
+            "generate_audio": self.generate_audio,
+            "person_generation": self.person_generation,
         }
+        if self.output_gcs_uri:
+            config_params["output_gcs_uri"] = self.output_gcs_uri
+
         if len(reference_image_paths) == 0:
             params["model"] = self.t2v_model
         elif len(reference_image_paths) == 1:
@@ -105,11 +124,23 @@ class VideoGeneratorVeoGoogleAPI:
             raise RuntimeError(error_msg)
 
         generated_video = operation.response.generated_videos[0]
-        self.client.files.download(file=generated_video.video)
+        video = generated_video.video
+        video_bytes = getattr(video, "video_bytes", None)
 
-        video_output = VideoOutput(
-            fmt="bytes",
-            ext="mp4",
-            data=generated_video.video.video_bytes,
-        )
-        return video_output
+        if not video_bytes and hasattr(self.client, "files"):
+            self.client.files.download(file=video)
+            video_bytes = getattr(video, "video_bytes", None)
+
+        video_uri = getattr(video, "uri", None) or getattr(video, "gcs_uri", None)
+
+        if video_bytes:
+            return VideoOutput(
+                fmt="bytes",
+                ext="mp4",
+                data=video_bytes,
+            )
+
+        if video_uri:
+            return VideoOutput(fmt="url", ext="mp4", data=video_uri)
+
+        raise RuntimeError("Video generation completed but no video bytes or URI were returned")

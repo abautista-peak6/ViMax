@@ -14,6 +14,15 @@ from utils.provider_presets import (
 class TestProviderPresets(unittest.TestCase):
     """Tests for the PROVIDER_PRESETS registry."""
 
+    def test_google_vertex_preset_exists(self):
+        self.assertIn("google_vertex", PROVIDER_PRESETS)
+
+    def test_google_vertex_defaults(self):
+        preset = PROVIDER_PRESETS["google_vertex"]
+        self.assertEqual(preset["default_model"], "gemini-2.5-flash")
+        self.assertEqual(preset["default_location"], "global")
+        self.assertEqual(preset["env_project"], "GOOGLE_CLOUD_PROJECT")
+
     def test_minimax_preset_exists(self):
         self.assertIn("minimax", PROVIDER_PRESETS)
 
@@ -52,10 +61,29 @@ class TestResolveChatModelConfig(unittest.TestCase):
         self.assertEqual(result["model"], "gpt-4")
         self.assertEqual(result["base_url"], "https://example.com")
 
-    def test_no_model_provider_passes_through(self):
-        args = {"model": "gpt-4"}
+    def test_no_model_provider_defaults_to_google_vertex(self):
+        args = {"model": "gemini-2.5-flash"}
         result = resolve_chat_model_config(args)
-        self.assertEqual(result["model"], "gpt-4")
+        self.assertEqual(result["model_provider"], "google_vertex")
+        self.assertEqual(result["model"], "gemini-2.5-flash")
+        self.assertEqual(result["location"], "global")
+
+    def test_google_vertex_defaults_model(self):
+        args = {"model_provider": "google_vertex"}
+        result = resolve_chat_model_config(args)
+        self.assertEqual(result["model"], "gemini-2.5-flash")
+
+    @patch.dict(os.environ, {"GOOGLE_CLOUD_PROJECT": "test-project"})
+    def test_google_vertex_reads_project_from_env(self):
+        args = {"model_provider": "google_vertex", "model": "gemini-2.5-flash"}
+        result = resolve_chat_model_config(args)
+        self.assertEqual(result["project"], "test-project")
+
+    @patch.dict(os.environ, {"GOOGLE_CLOUD_LOCATION": "us-central1"})
+    def test_google_vertex_reads_location_from_env(self):
+        args = {"model_provider": "google_vertex", "model": "gemini-2.5-flash"}
+        result = resolve_chat_model_config(args)
+        self.assertEqual(result["location"], "us-central1")
 
     def test_minimax_rewrites_provider_to_openai(self):
         args = {"model_provider": "minimax", "model": "MiniMax-M2.7", "api_key": "sk-test"}
@@ -143,7 +171,11 @@ class TestResolveChatModelConfig(unittest.TestCase):
 class TestDetectProviderFromEnv(unittest.TestCase):
     """Tests for detect_provider_from_env()."""
 
-    @patch.dict(os.environ, {"MINIMAX_API_KEY": "test-key"}, clear=False)
+    @patch.dict(os.environ, {"GOOGLE_CLOUD_PROJECT": "test-project"}, clear=True)
+    def test_detects_google_vertex(self):
+        self.assertEqual(detect_provider_from_env(), "google_vertex")
+
+    @patch.dict(os.environ, {"MINIMAX_API_KEY": "test-key"}, clear=True)
     def test_detects_minimax(self):
         self.assertEqual(detect_provider_from_env(), "minimax")
 
@@ -154,6 +186,23 @@ class TestDetectProviderFromEnv(unittest.TestCase):
 
 class TestConfigYAMLLoading(unittest.TestCase):
     """Test that MiniMax example config files are valid YAML."""
+
+    def test_idea2video_default_yaml_uses_google_vertex(self):
+        import yaml
+        path = os.path.join(os.path.dirname(__file__), "..", "configs", "idea2video.yaml")
+        with open(path) as f:
+            config = yaml.safe_load(f)
+        self.assertEqual(config["chat_model"]["init_args"]["model_provider"], "google_vertex")
+        self.assertEqual(config["image_generator"]["init_args"]["location"], "global")
+        self.assertEqual(config["video_generator"]["init_args"]["t2v_model"], "veo-3.1-generate-001")
+
+    def test_script2video_default_yaml_uses_google_vertex(self):
+        import yaml
+        path = os.path.join(os.path.dirname(__file__), "..", "configs", "script2video.yaml")
+        with open(path) as f:
+            config = yaml.safe_load(f)
+        self.assertEqual(config["chat_model"]["init_args"]["model_provider"], "google_vertex")
+        self.assertEqual(config["image_generator"]["init_args"]["model"], "gemini-2.5-flash-image")
 
     def test_idea2video_minimax_yaml(self):
         import yaml

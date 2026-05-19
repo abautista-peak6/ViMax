@@ -10,9 +10,9 @@ from PIL import Image
 from agents import *
 import yaml
 from interfaces import *
-from langchain.chat_models import init_chat_model
 from tools.render_backend import RenderBackend
-from utils.provider_presets import resolve_chat_model_config
+from utils.chat_model_factory import create_chat_model
+from utils.video_prompt_sanitizer import sanitize_video_prompt
 
 class Script2VideoPipeline:
 
@@ -41,6 +41,7 @@ class Script2VideoPipeline:
         self.reference_image_selector = ReferenceImageSelector(chat_model=self.chat_model)
 
         self.working_dir = working_dir
+        self._video_prompt_character_identifiers: List[str] = []
         os.makedirs(self.working_dir, exist_ok=True)
 
 
@@ -50,8 +51,7 @@ class Script2VideoPipeline:
         with open(config_path, "r") as f:
             config = yaml.safe_load(f)
 
-        chat_model_args = resolve_chat_model_config(config["chat_model"]["init_args"])
-        chat_model = init_chat_model(**chat_model_args)
+        chat_model = create_chat_model(config["chat_model"]["init_args"])
         backend = RenderBackend.from_config(config)
 
         return cls(
@@ -102,6 +102,9 @@ class Script2VideoPipeline:
                     json.dump(character_portraits_registry, f, ensure_ascii=False, indent=4)
                 print(f"☑️ Generated {len(character_portraits_registry)} character portraits and saved to {character_portraits_registry_path}.")
 
+        self._video_prompt_character_identifiers = [
+            character.identifier_in_scene for character in characters
+        ]
 
 
         # design shots
@@ -153,7 +156,12 @@ class Script2VideoPipeline:
                 for shot_description in shot_descriptions
             ]
             final_video = concatenate_videoclips(video_clips)
-            final_video.write_videofile(final_video_path, codec="libx264", preset="medium")
+            final_video.write_videofile(
+                final_video_path,
+                codec="libx264",
+                audio_codec="aac",
+                preset="medium",
+            )
             print(f"☑️ Concatenated videos, saved to {final_video_path}.")
 
         return final_video_path
@@ -198,8 +206,8 @@ class Script2VideoPipeline:
                 else:
                     print(f"🖼️ Starting transition video generation for shot {first_shot_idx} from shot {parent_shot_idx}...")
                     transition_video_output = await self.camera_image_generator.generate_transition_video(
-                        first_shot_visual_desc=shot_descriptions[parent_shot_idx].visual_desc,
-                        second_shot_visual_desc=shot_descriptions[first_shot_idx].visual_desc,
+                        first_shot_visual_desc=self._sanitize_video_prompt(shot_descriptions[parent_shot_idx].visual_desc),
+                        second_shot_visual_desc=self._sanitize_video_prompt(shot_descriptions[first_shot_idx].visual_desc),
                         first_shot_ff_path=parent_shot_ff_path,
                     )
                     transition_video_output.save(transition_video_path)
@@ -325,12 +333,22 @@ class Script2VideoPipeline:
                 frame_paths.append(os.path.join(self.working_dir, "shots", f"{shot_description.idx}", "last_frame.png"))
 
             print(f"🎬 Starting video generation for shot {shot_description.idx}...")
+            raw_prompt = "\n".join(
+                part for part in [shot_description.motion_desc, shot_description.audio_desc] if part
+            )
+            prompt = self._sanitize_video_prompt(raw_prompt)
             video_output = await self.video_generator.generate_single_video(
-                prompt=shot_description.motion_desc + "\n" + shot_description.audio_desc,
+                prompt=prompt,
                 reference_image_paths=frame_paths,
             )
             video_output.save(video_path)
             print(f"☑️ Generated video for shot {shot_description.idx}, saved to {video_path}.")
+
+    def _sanitize_video_prompt(self, prompt: str) -> str:
+        return sanitize_video_prompt(
+            prompt=prompt,
+            character_identifiers=self._video_prompt_character_identifiers,
+        )
 
     async def generate_frame_for_single_shot(
         self,

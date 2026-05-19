@@ -2,7 +2,6 @@ import logging
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain.chat_models.base import BaseChatModel
-from langchain.chat_models import init_chat_model
 from pydantic import BaseModel, Field
 from typing import List
 from tenacity import retry, stop_after_attempt
@@ -86,4 +85,3 @@ class CharacterExtractor:
         response: ExtractCharactersResponse = await chain.ainvoke(messages)
 
         return response.characters
-
