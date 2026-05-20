@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
 import asyncio
+import json
 from google.genai import types
 from google.genai.errors import ClientError
 from interfaces.video_output import VideoOutput
@@ -119,7 +120,10 @@ class VideoGeneratorVeoGoogleAPI:
             raise RuntimeError(error_msg)
 
         if not hasattr(operation.response, 'generated_videos') or not operation.response.generated_videos:
+            filter_details = self._format_filter_details(operation.response)
             error_msg = "Video generation completed but no videos were generated"
+            if filter_details:
+                error_msg += f" ({filter_details})"
             logging.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -144,3 +148,19 @@ class VideoGeneratorVeoGoogleAPI:
             return VideoOutput(fmt="url", ext="mp4", data=video_uri)
 
         raise RuntimeError("Video generation completed but no video bytes or URI were returned")
+
+    def _format_filter_details(self, response) -> str:
+        details = {}
+        for field in [
+            "rai_media_filtered_count",
+            "raiMediaFilteredCount",
+            "rai_media_filtered_reasons",
+            "raiMediaFilteredReasons",
+        ]:
+            value = getattr(response, field, None)
+            if value:
+                details[field] = value
+
+        if details:
+            return json.dumps(details, default=str)
+        return ""

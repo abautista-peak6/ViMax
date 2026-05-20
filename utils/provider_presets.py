@@ -20,9 +20,11 @@ PROVIDER_PRESETS: Dict[str, Dict[str, Any]] = {
     "google_vertex": {
         "env_project": "GOOGLE_CLOUD_PROJECT",
         "env_location": "GOOGLE_CLOUD_LOCATION",
-        "default_model": "gemini-2.5-flash",
+        "default_model": "gemini-3.1-pro-preview",
         "default_location": "global",
         "models": [
+            "gemini-3.1-pro-preview",
+            "gemini-3-flash-preview",
             "gemini-2.5-flash",
             "gemini-2.5-flash-lite",
             "gemini-2.5-pro",

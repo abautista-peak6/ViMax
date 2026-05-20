@@ -19,7 +19,7 @@ class TestProviderPresets(unittest.TestCase):
 
     def test_google_vertex_defaults(self):
         preset = PROVIDER_PRESETS["google_vertex"]
-        self.assertEqual(preset["default_model"], "gemini-2.5-flash")
+        self.assertEqual(preset["default_model"], "gemini-3.1-pro-preview")
         self.assertEqual(preset["default_location"], "global")
         self.assertEqual(preset["env_project"], "GOOGLE_CLOUD_PROJECT")
 
@@ -71,7 +71,7 @@ class TestResolveChatModelConfig(unittest.TestCase):
     def test_google_vertex_defaults_model(self):
         args = {"model_provider": "google_vertex"}
         result = resolve_chat_model_config(args)
-        self.assertEqual(result["model"], "gemini-2.5-flash")
+        self.assertEqual(result["model"], "gemini-3.1-pro-preview")
 
     @patch.dict(os.environ, {"GOOGLE_CLOUD_PROJECT": "test-project"})
     def test_google_vertex_reads_project_from_env(self):
@@ -193,7 +193,9 @@ class TestConfigYAMLLoading(unittest.TestCase):
         with open(path) as f:
             config = yaml.safe_load(f)
         self.assertEqual(config["chat_model"]["init_args"]["model_provider"], "google_vertex")
+        self.assertEqual(config["chat_model"]["init_args"]["model"], "gemini-3.1-pro-preview")
         self.assertEqual(config["image_generator"]["init_args"]["location"], "global")
+        self.assertEqual(config["image_generator"]["init_args"]["model"], "gemini-3-pro-image-preview")
         self.assertEqual(config["video_generator"]["init_args"]["t2v_model"], "veo-3.1-generate-001")
 
     def test_script2video_default_yaml_uses_google_vertex(self):
@@ -202,7 +204,8 @@ class TestConfigYAMLLoading(unittest.TestCase):
         with open(path) as f:
             config = yaml.safe_load(f)
         self.assertEqual(config["chat_model"]["init_args"]["model_provider"], "google_vertex")
-        self.assertEqual(config["image_generator"]["init_args"]["model"], "gemini-2.5-flash-image")
+        self.assertEqual(config["chat_model"]["init_args"]["model"], "gemini-3.1-pro-preview")
+        self.assertEqual(config["image_generator"]["init_args"]["model"], "gemini-3-pro-image-preview")
 
     def test_idea2video_minimax_yaml(self):
         import yaml

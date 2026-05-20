@@ -19,7 +19,7 @@ class ImageGeneratorNanobananaGoogleAPI:
         api_key: Optional[str] = None,
         project: Optional[str] = None,
         location: Optional[str] = None,
-        model: str = "gemini-2.5-flash-image",
+        model: str = "gemini-3-pro-image-preview",
         use_vertex_ai: bool = True,
         api_version: str = "v1",
         rate_limiter: Optional[RateLimiter] = None,

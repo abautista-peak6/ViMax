@@ -416,7 +416,7 @@ Then configure the Vertex model information in the configs/idea2video.yaml file,
 ```yaml
 chat_model:
   init_args:
-    model: gemini-2.5-flash
+    model: gemini-3.1-pro-preview
     model_provider: google_vertex
     project:
     location: global
@@ -426,7 +426,7 @@ image_generator:
   init_args:
     project:
     location: global
-    model: gemini-2.5-flash-image
+    model: gemini-3-pro-image-preview
 
 video_generator:
   class_path: tools.VideoGeneratorVeoGoogleAPI

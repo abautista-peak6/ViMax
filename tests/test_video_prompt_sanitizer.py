@@ -34,6 +34,31 @@ class TestVideoPromptSanitizer(unittest.TestCase):
 
         self.assertEqual(prompt, sanitized)
 
+    def test_does_not_replace_product_or_mascot_names(self):
+        prompt = (
+            'The product box says "AI Girlfriend". '
+            "The AI Girlfriend Mascot waves from the phone."
+        )
+
+        sanitized = sanitize_video_prompt(prompt, ["Gary", "AI Girlfriend Mascot"])
+
+        self.assertIn('"AI Girlfriend"', sanitized)
+        self.assertIn("AI Girlfriend Mascot", sanitized)
+        self.assertNotIn("the character 2", sanitized)
+
+    def test_does_not_replace_narrator_roles(self):
+        prompt = (
+            'Infomercial Narrator says: "Get AI Girlfriend today!" '
+            "Gary raises a glass."
+        )
+
+        sanitized = sanitize_video_prompt(prompt, ["Gary", "Infomercial Narrator"])
+
+        self.assertIn("Infomercial Narrator", sanitized)
+        self.assertIn("AI Girlfriend", sanitized)
+        self.assertNotIn("the character 2", sanitized)
+        self.assertNotIn("Gary", sanitized)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -157,15 +157,26 @@ class CameraImageGenerator:
         first_shot_ff_path: str,
     ) -> VideoOutput:
 
-        prompt = f"Two shots. The transition between the shots is a cut to. The style of the two shots should be consistent."
-        prompt += f"\nThe first shot description: {first_shot_visual_desc}."
-        prompt += f"\nThe second shot description: {second_shot_visual_desc}."
+        prompt = self.build_transition_video_prompt(
+            first_shot_visual_desc=first_shot_visual_desc,
+            second_shot_visual_desc=second_shot_visual_desc,
+        )
         reference_image_paths = [first_shot_ff_path]
         video_output = await self.video_generator.generate_single_video(
             prompt=prompt,
             reference_image_paths=reference_image_paths,
         )
         return video_output
+
+    def build_transition_video_prompt(
+        self,
+        first_shot_visual_desc: str,
+        second_shot_visual_desc: str,
+    ) -> str:
+        prompt = "Two shots. The transition between the shots is a cut to. The style of the two shots should be consistent."
+        prompt += f"\nThe first shot description: {first_shot_visual_desc}."
+        prompt += f"\nThe second shot description: {second_shot_visual_desc}."
+        return prompt
 
 
     def get_new_camera_image(

@@ -53,6 +53,14 @@ sys.modules["agents"] = _agents_stub
 
 _chat_factory_stub = types.ModuleType("utils.chat_model_factory")
 _chat_factory_stub.create_chat_model = MagicMock()
+_chat_factory_stub.chat_model_args_from_config = lambda section: {
+    **dict(section.get("init_args", section)),
+    **{
+        key: section[key]
+        for key in ("max_requests_per_minute", "max_requests_per_day")
+        if section.get(key) is not None
+    },
+}
 sys.modules["utils.chat_model_factory"] = _chat_factory_stub
 
 from utils.provider_presets import resolve_chat_model_config
@@ -177,7 +185,7 @@ class TestPipelineInitFromConfig(unittest.TestCase):
         mock_create.assert_called_once()
         call_args = mock_create.call_args[0][0]
         self.assertEqual(call_args["model_provider"], "google_vertex")
-        self.assertEqual(call_args["model"], "gemini-2.5-flash")
+        self.assertEqual(call_args["model"], "gemini-3.1-pro-preview")
 
 
 class TestCameoRegistry(unittest.TestCase):
@@ -321,6 +329,20 @@ class TestCameoRegistry(unittest.TestCase):
         self.assertEqual(generator.front_calls, 0)
         self.assertEqual(generator.side_calls, 1)
         self.assertEqual(generator.back_calls, 1)
+
+
+class TestScript2VideoRetryPrompts(unittest.TestCase):
+    def test_text_only_retry_prompt_marks_character_as_adult(self):
+        from pipelines.script2video_pipeline import Script2VideoPipeline
+
+        pipeline = Script2VideoPipeline.__new__(Script2VideoPipeline)
+        pipeline._video_prompt_character_identifiers = []
+
+        prompt = pipeline._build_text_only_adult_cartoon_prompt()
+
+        self.assertIn("clearly adult", prompt)
+        self.assertIn("mid-thirties", prompt)
+        self.assertNotIn("child", prompt.lower())
 
 
 if __name__ == "__main__":

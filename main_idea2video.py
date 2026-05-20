@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import os
 import shutil
+from datetime import datetime
 
 from pipelines.idea2video_pipeline import Idea2VideoPipeline
 
@@ -18,6 +19,16 @@ For adults, do not exceed 3 scenes. Each scene should be no more than 5 shots.
 """
 DEFAULT_STYLE = "Realistic, warm feel"
 DEFAULT_WORKING_DIR = ".working_dir/idea2video"
+
+
+def archive_existing_working_dir(working_dir: str):
+    if not os.path.exists(working_dir):
+        return
+
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    archive_dir = f"{working_dir}_{timestamp}"
+    shutil.move(working_dir, archive_dir)
+    print(f"Archived existing working directory to {archive_dir}.")
 
 
 def parse_args():
@@ -53,7 +64,7 @@ async def main():
             idea = f.read()
 
     if args.fresh:
-        shutil.rmtree(DEFAULT_WORKING_DIR, ignore_errors=True)
+        archive_existing_working_dir(DEFAULT_WORKING_DIR)
 
     cameo_image_path = None
     if args.cameo_image:

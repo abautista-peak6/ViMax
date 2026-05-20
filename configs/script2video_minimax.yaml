@@ -22,7 +22,7 @@ image_generator:
   init_args:
     project: p6s-p6strat-abautista-dev
     location: global
-    model: gemini-2.5-flash-image
+    model: gemini-3-pro-image-preview
   max_requests_per_minute: 2
   max_requests_per_day: 50
 

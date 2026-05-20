@@ -20,6 +20,8 @@ _VERTEX_DIRECT_KWARGS = {
     "top_k",
     "candidate_count",
     "api_version",
+    "max_requests_per_minute",
+    "max_requests_per_day",
 }
 
 
@@ -34,7 +36,7 @@ def create_chat_model(init_args: Dict[str, Any]):
             for key, value in args.items()
             if key in _VERTEX_DIRECT_KWARGS and value is not None
         }
-        vertex_args.setdefault("model", "gemini-2.5-flash")
+        vertex_args.setdefault("model", "gemini-3.1-pro-preview")
         model_kwargs = {
             key: value
             for key, value in args.items()
@@ -47,3 +49,12 @@ def create_chat_model(init_args: Dict[str, Any]):
         return ChatGoogleVertexAI(**vertex_args)
 
     return init_chat_model(**args)
+
+
+def chat_model_args_from_config(section: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge chat init args with optional config-level rate limits."""
+    args = dict(section.get("init_args", section))
+    for key in ("max_requests_per_minute", "max_requests_per_day"):
+        if section.get(key) is not None:
+            args[key] = section[key]
+    return args

@@ -27,6 +27,9 @@ def sanitize_video_prompt(
 def _build_term_replacements(character_identifiers: Iterable[str]) -> dict[str, str]:
     term_to_replacements: dict[str, set[str]] = {}
     for index, identifier in enumerate(character_identifiers or []):
+        if _is_non_person_or_role_identifier(identifier):
+            continue
+
         replacement = "the presenter" if index == 0 else f"the character {index + 1}"
         for term in _identifier_terms(identifier):
             term_to_replacements.setdefault(term.casefold(), set()).add(replacement)
@@ -53,6 +56,31 @@ def _identifier_terms(identifier: str) -> list[str]:
     if len(name_tokens) >= 2:
         terms.extend(name_tokens)
     return list(dict.fromkeys(terms))
+
+
+def _is_non_person_or_role_identifier(identifier: str) -> bool:
+    clean = re.sub(r"\s+", " ", identifier or "").strip().casefold()
+    if not clean:
+        return True
+
+    non_person_keywords = {
+        "ai",
+        "app",
+        "assistant",
+        "avatar",
+        "bot",
+        "brand",
+        "company",
+        "girlfriend",
+        "logo",
+        "mascot",
+        "narrator",
+        "product",
+        "voice",
+        "vo",
+    }
+    tokens = set(re.findall(r"[a-z]+", clean))
+    return bool(tokens & non_person_keywords)
 
 
 def _replace_term(text: str, term: str, replacement: str) -> str:

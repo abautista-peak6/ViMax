@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import mimetypes
 import os
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -18,12 +19,13 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field, PrivateAttr
 
 from utils.google_vertex import create_genai_client
+from utils.rate_limiter import RateLimiter
 
 
 class ChatGoogleVertexAI(BaseChatModel):
     """Minimal LangChain chat adapter for Gemini models served by Vertex AI."""
 
-    model: str = "gemini-2.5-flash"
+    model: str = "gemini-3.1-pro-preview"
     project: Optional[str] = None
     location: Optional[str] = None
     temperature: Optional[float] = None
@@ -33,9 +35,12 @@ class ChatGoogleVertexAI(BaseChatModel):
     top_k: Optional[int] = None
     candidate_count: Optional[int] = None
     api_version: str = "v1"
+    max_requests_per_minute: Optional[int] = None
+    max_requests_per_day: Optional[int] = None
     model_kwargs: Dict[str, Any] = Field(default_factory=dict)
 
     _client: Any = PrivateAttr()
+    _rate_limiter: Optional[RateLimiter] = PrivateAttr(default=None)
 
     def __init__(self, **data: Any):
         super().__init__(**data)
@@ -45,6 +50,11 @@ class ChatGoogleVertexAI(BaseChatModel):
             use_vertex_ai=True,
             api_version=self.api_version,
         )
+        if self.max_requests_per_minute or self.max_requests_per_day:
+            self._rate_limiter = RateLimiter(
+                max_requests_per_minute=self.max_requests_per_minute,
+                max_requests_per_day=self.max_requests_per_day,
+            )
 
     @property
     def _llm_type(self) -> str:
@@ -65,6 +75,7 @@ class ChatGoogleVertexAI(BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        self._acquire_rate_limit_sync()
         contents, system_instruction = self._messages_to_contents(messages)
         response = self._client.models.generate_content(
             model=self.model,
@@ -80,6 +91,8 @@ class ChatGoogleVertexAI(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        if self._rate_limiter:
+            await self._rate_limiter.acquire()
         contents, system_instruction = self._messages_to_contents(messages)
         response = await self._client.aio.models.generate_content(
             model=self.model,
@@ -113,6 +126,14 @@ class ChatGoogleVertexAI(BaseChatModel):
             config_kwargs["system_instruction"] = system_instruction
 
         return types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
+
+    def _acquire_rate_limit_sync(self):
+        if not self._rate_limiter:
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(self._rate_limiter.acquire())
 
     def _messages_to_contents(
         self,

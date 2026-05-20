@@ -1,6 +1,5 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Union, Dict
-from PIL import Image
 
 
 
@@ -30,6 +29,13 @@ class CharacterInScene(BaseModel):
             "Wearing a red scarf and a black leather jacket",
         ]
     )
+
+    @field_validator("static_features", "dynamic_features", mode="before")
+    @classmethod
+    def empty_missing_feature_text(cls, value):
+        if value is None:
+            return ""
+        return value
 
     def __str__(self):
         # Alice[visible]
@@ -97,4 +103,3 @@ class CharacterInNovel(BaseModel):
             "Bob the Builder is a middle-aged man with a sturdy build. He typically wears a hard hat and work overalls.",
         ]
     )
-
