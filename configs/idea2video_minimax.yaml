@@ -20,7 +20,7 @@ chat_model:
 image_generator:
   class_path: tools.ImageGeneratorNanobananaGoogleAPI
   init_args:
-    project: p6s-p6strat-abautista-dev
+    project:
     location: global
     model: gemini-3-pro-image-preview
   max_requests_per_minute: 10
@@ -29,7 +29,7 @@ image_generator:
 video_generator:
   class_path: tools.VideoGeneratorVeoGoogleAPI
   init_args:
-    project: p6s-p6strat-abautista-dev
+    project:
     location: global
     t2v_model: veo-3.1-generate-001
     ff2v_model: veo-3.1-generate-001

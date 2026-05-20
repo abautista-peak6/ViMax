@@ -2,7 +2,7 @@ chat_model:
   init_args:
     model: gemini-3.1-pro-preview
     model_provider: google_vertex
-    project: p6s-p6strat-abautista-dev
+    project:
     location: global
   # Rate limits for chat model API calls
   # Set to null to disable rate limiting for this service
@@ -12,7 +12,7 @@ chat_model:
 image_generator:
   class_path: tools.ImageGeneratorNanobananaGoogleAPI
   init_args:
-    project: p6s-p6strat-abautista-dev
+    project:
     location: global
     model: gemini-3-pro-image-preview
   # Rate limits for image generation API calls
@@ -24,7 +24,7 @@ image_generator:
 video_generator:
   class_path: tools.VideoGeneratorVeoGoogleAPI
   init_args:
-    project: p6s-p6strat-abautista-dev
+    project:
     location: global
     t2v_model: veo-3.1-generate-001
     ff2v_model: veo-3.1-generate-001

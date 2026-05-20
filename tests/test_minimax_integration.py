@@ -332,17 +332,97 @@ class TestCameoRegistry(unittest.TestCase):
 
 
 class TestScript2VideoRetryPrompts(unittest.TestCase):
-    def test_text_only_retry_prompt_marks_character_as_adult(self):
+    def _shot_description(self):
+        from interfaces import ShotDescription
+
+        return ShotDescription(
+            idx=0,
+            is_last=True,
+            cam_idx=0,
+            visual_desc="A brave kitten in a tiny helmet crosses a stormy beach.",
+            variation_type="medium",
+            variation_reason="The kitten advances from the surf to the ridge.",
+            ff_desc="The kitten stands in wet sand under storm clouds.",
+            ff_vis_char_idxs=[0],
+            lf_desc="The kitten reaches a small flag at the ridge.",
+            lf_vis_char_idxs=[0],
+            motion_desc="The kitten runs forward through rain and ocean spray.",
+            audio_desc="Dramatic orchestral music, rain, waves, and distant rumbles.",
+        )
+
+    def test_text_only_retry_prompt_uses_current_shot(self):
         from pipelines.script2video_pipeline import Script2VideoPipeline
 
         pipeline = Script2VideoPipeline.__new__(Script2VideoPipeline)
         pipeline._video_prompt_character_identifiers = []
 
-        prompt = pipeline._build_text_only_adult_cartoon_prompt()
+        prompt = pipeline._build_text_only_fallback_prompt(self._shot_description())
 
-        self.assertIn("clearly adult", prompt)
-        self.assertIn("mid-thirties", prompt)
-        self.assertNotIn("child", prompt.lower())
+        self.assertIn("brave kitten", prompt)
+        self.assertNotIn("phone", prompt.lower())
+        self.assertNotIn("infomercial", prompt.lower())
+        self.assertNotIn("glass of water", prompt.lower())
+
+    def test_safe_retry_prompt_does_not_inject_old_product_demo(self):
+        from pipelines.script2video_pipeline import Script2VideoPipeline
+
+        pipeline = Script2VideoPipeline.__new__(Script2VideoPipeline)
+        pipeline._video_prompt_character_identifiers = []
+
+        prompt = pipeline._build_safe_video_retry_prompt(self._shot_description())
+
+        self.assertIn("stormy beach", prompt)
+        self.assertNotIn("phone", prompt.lower())
+        self.assertNotIn("product-demo", prompt.lower())
+
+    def test_input_image_policy_error_retries_without_reference_frames(self):
+        from pipelines.script2video_pipeline import Script2VideoPipeline
+
+        class FakeVideoOutput:
+            def save(self, path):
+                with open(path, "wb") as f:
+                    f.write(b"video")
+
+        class FakeVideoGenerator:
+            def __init__(self):
+                self.calls = []
+
+            async def generate_single_video(self, prompt, reference_image_paths):
+                self.calls.append((prompt, reference_image_paths))
+                if len(self.calls) == 1:
+                    raise RuntimeError(
+                        "Video generation failed: {'message': "
+                        "\"Veo could not generate videos because the input image "
+                        "violates Vertex AI's usage guidelines.\"}"
+                    )
+                return FakeVideoOutput()
+
+        async def run_test():
+            with tempfile.TemporaryDirectory() as working_dir:
+                pipeline = Script2VideoPipeline.__new__(Script2VideoPipeline)
+                pipeline.working_dir = working_dir
+                pipeline.video_generator = FakeVideoGenerator()
+                pipeline._video_prompt_character_identifiers = []
+                first_frame_event = asyncio.Event()
+                first_frame_event.set()
+                last_frame_event = asyncio.Event()
+                last_frame_event.set()
+                pipeline.frame_events = {
+                    0: {
+                        "first_frame": first_frame_event,
+                        "last_frame": last_frame_event,
+                    }
+                }
+
+                await pipeline.generate_video_for_single_shot(self._shot_description())
+
+                calls = pipeline.video_generator.calls
+                self.assertEqual(len(calls), 2)
+                self.assertTrue(calls[0][1])
+                self.assertEqual(calls[1][1], [])
+                self.assertTrue(os.path.exists(os.path.join(working_dir, "shots", "0", "video.mp4")))
+
+        asyncio.run(run_test())
 
 
 if __name__ == "__main__":

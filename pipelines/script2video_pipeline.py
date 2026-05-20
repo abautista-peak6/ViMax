@@ -231,11 +231,11 @@ class Script2VideoPipeline:
                         transition_video_available = True
                         print(f"☑️ Generated transition video for shot {first_shot_idx} from shot {parent_shot_idx}, saved to {transition_video_path}.")
                     except RuntimeError as exc:
-                        if "no videos were generated" not in str(exc):
+                        if not self._can_fallback_without_transition_video(exc):
                             raise
                         print(
                             f"⚠️ Transition video for shot {first_shot_idx} from shot {parent_shot_idx} "
-                            "returned no videos. Falling back to direct frame generation from references."
+                            "could not be generated. Falling back to direct frame generation from references."
                         )
 
                 new_camera_image_path = os.path.join(self.working_dir, "shots", f"{first_shot_idx}", f"new_camera_{camera.idx}.png")
@@ -352,6 +352,7 @@ class Script2VideoPipeline:
         shot_description: ShotDescription,
     ):
         video_path = os.path.join(self.working_dir, "shots", f"{shot_description.idx}", "video.mp4")
+        os.makedirs(os.path.dirname(video_path), exist_ok=True)
         if os.path.exists(video_path):
             print(f"🚀 Skipped generating video for shot {shot_description.idx}, already exists.")
         else:
@@ -394,30 +395,8 @@ class Script2VideoPipeline:
                     reference_image_paths=frame_paths,
                 )
             except RuntimeError as exc:
-                if "no videos were generated" not in str(exc):
-                    raise
-
-                retry_prompt = prompt if used_simplified_prompt else self._build_safe_video_retry_prompt(shot_description)
-                retry_prompt_path = os.path.join(self.working_dir, "shots", f"{shot_description.idx}", "video_prompt_retry.txt")
-                with open(retry_prompt_path, "w", encoding="utf-8") as f:
-                    f.write(retry_prompt)
-                try:
-                    if used_simplified_prompt and "17301594" in str(exc):
-                        raise exc
-
-                    print(
-                        f"⚠️ Video generation for shot {shot_description.idx} returned no videos. "
-                        "Retrying once with a simpler safety-focused prompt..."
-                    )
-                    video_output = await self.video_generator.generate_single_video(
-                        prompt=retry_prompt,
-                        reference_image_paths=frame_paths,
-                    )
-                except RuntimeError as retry_exc:
-                    if "17301594" not in str(retry_exc) or not frame_paths:
-                        raise
-
-                    text_only_prompt = self._build_text_only_adult_cartoon_prompt()
+                if self._is_input_image_policy_error(exc):
+                    text_only_prompt = self._build_text_only_fallback_prompt(shot_description)
                     text_only_prompt_path = os.path.join(
                         self.working_dir,
                         "shots",
@@ -427,13 +406,53 @@ class Script2VideoPipeline:
                     with open(text_only_prompt_path, "w", encoding="utf-8") as f:
                         f.write(text_only_prompt)
                     print(
-                        f"⚠️ Shot {shot_description.idx} hit Vertex's child/minor image filter. "
-                        "Retrying once without reference frames as a clearly adult cartoon insert..."
+                        f"⚠️ Shot {shot_description.idx} reference image was rejected by Vertex. "
+                        "Retrying without reference frames using a current-shot-only prompt..."
                     )
                     video_output = await self.video_generator.generate_single_video(
                         prompt=text_only_prompt,
                         reference_image_paths=[],
                     )
+                elif "no videos were generated" not in str(exc):
+                    raise
+                else:
+                    retry_prompt = prompt if used_simplified_prompt else self._build_safe_video_retry_prompt(shot_description)
+                    retry_prompt_path = os.path.join(self.working_dir, "shots", f"{shot_description.idx}", "video_prompt_retry.txt")
+                    with open(retry_prompt_path, "w", encoding="utf-8") as f:
+                        f.write(retry_prompt)
+                    try:
+                        if used_simplified_prompt and "17301594" in str(exc):
+                            raise exc
+
+                        print(
+                            f"⚠️ Video generation for shot {shot_description.idx} returned no videos. "
+                            "Retrying once with a simpler safety-focused prompt..."
+                        )
+                        video_output = await self.video_generator.generate_single_video(
+                            prompt=retry_prompt,
+                            reference_image_paths=frame_paths,
+                        )
+                    except RuntimeError as retry_exc:
+                        if "17301594" not in str(retry_exc) or not frame_paths:
+                            raise
+
+                        text_only_prompt = self._build_text_only_fallback_prompt(shot_description)
+                        text_only_prompt_path = os.path.join(
+                            self.working_dir,
+                            "shots",
+                            f"{shot_description.idx}",
+                            "video_prompt_text_only.txt",
+                        )
+                        with open(text_only_prompt_path, "w", encoding="utf-8") as f:
+                            f.write(text_only_prompt)
+                        print(
+                            f"⚠️ Shot {shot_description.idx} hit Vertex's child/minor image filter. "
+                            "Retrying once without reference frames using a current-shot-only prompt..."
+                        )
+                        video_output = await self.video_generator.generate_single_video(
+                            prompt=text_only_prompt,
+                            reference_image_paths=[],
+                        )
             video_output.save(video_path)
             print(f"☑️ Generated video for shot {shot_description.idx}, saved to {video_path}.")
 
@@ -445,30 +464,50 @@ class Script2VideoPipeline:
 
     def _build_safe_video_retry_prompt(self, shot_description: ShotDescription) -> str:
         raw_prompt = (
-            "Create an 8-second bright 2D cartoon product-demo clip that smoothly "
-            "connects the provided first and last frames. Keep the motion simple, "
-            "playful, wholesome, and PG. The main character is a clearly adult man "
-            "in his mid-thirties with mature proportions. Show him reacting happily "
-            "to a friendly non-human phone avatar, then celebrating a tiny practical "
-            "win with exaggerated infomercial energy. Use upbeat instrumental cartoon "
-            "music, sparkle sounds, a light chuckle, and a cheerful final chime."
-            f"\nFirst frame: {shot_description.ff_desc}"
-            f"\nLast frame: {shot_description.lf_desc}"
+            "Create an 8-second video clip that matches the provided reference "
+            "frame or frames and this current shot only. Preserve the subject, "
+            "setting, visual style, composition, and story continuity from the "
+            "reference frames. Keep motion simple, coherent, non-graphic, and "
+            "safe for general audiences. Do not introduce unrelated products, "
+            "characters, settings, props, logos, on-screen text, or narrative beats."
+            f"\nVisual: {self._prompt_excerpt(shot_description.visual_desc, 450)}"
+            f"\nMotion: {self._prompt_excerpt(shot_description.motion_desc, 500)}"
+            f"\nAudio: {self._prompt_excerpt(shot_description.audio_desc, 300)}"
+            f"\nFirst frame: {self._prompt_excerpt(shot_description.ff_desc, 450)}"
+        )
+        if shot_description.variation_type in ["medium", "large"]:
+            raw_prompt += f"\nLast frame: {self._prompt_excerpt(shot_description.lf_desc, 450)}"
+        return self._sanitize_video_prompt(raw_prompt)
+
+    def _build_text_only_fallback_prompt(self, shot_description: ShotDescription) -> str:
+        raw_prompt = (
+            "Create an 8-second standalone video clip for this current shot only. "
+            "Follow the shot description below and preserve its intended subject, "
+            "setting, style, and story beat. Keep the result coherent, non-graphic, "
+            "and safe for general audiences. If any human characters are present, "
+            "depict them as clearly adult. Do not introduce unrelated products, "
+            "characters, settings, props, logos, on-screen text, or narrative beats."
+            f"\nVisual: {self._prompt_excerpt(shot_description.visual_desc, 600)}"
+            f"\nMotion: {self._prompt_excerpt(shot_description.motion_desc, 600)}"
+            f"\nAudio: {self._prompt_excerpt(shot_description.audio_desc, 350)}"
         )
         return self._sanitize_video_prompt(raw_prompt)
 
-    def _build_text_only_adult_cartoon_prompt(self) -> str:
-        raw_prompt = (
-            "Create an 8-second bright 2D cartoon infomercial insert. A clearly adult "
-            "male cartoon character in his mid-thirties with mature proportions sits "
-            "in a cluttered apartment holding a smartphone. A friendly blue non-human "
-            "watering-can avatar smiles on the phone screen. The adult character laughs, "
-            "takes a few exaggerated cartoon steps, returns holding a glass of water, "
-            "and raises it in a triumphant toast while confetti pops around the phone. "
-            "Keep the style colorful, silly, wholesome, and product-demo focused. "
-            "Audio is an upbeat instrumental jingle with sparkle sounds and a final chime."
-        )
-        return self._sanitize_video_prompt(raw_prompt)
+    def _can_fallback_without_transition_video(self, exc: RuntimeError) -> bool:
+        message = str(exc)
+        return "no videos were generated" in message or self._is_input_image_policy_error(exc)
+
+    def _is_input_image_policy_error(self, exc: RuntimeError) -> bool:
+        message = str(exc).lower()
+        return "input image violates" in message and "vertex ai" in message
+
+    def _prompt_excerpt(self, text: Optional[str], max_chars: int) -> str:
+        if not text:
+            return ""
+        text = " ".join(str(text).split())
+        if len(text) <= max_chars:
+            return text
+        return text[: max_chars - 3].rsplit(" ", 1)[0] + "..."
 
     async def generate_frame_for_single_shot(
         self,
